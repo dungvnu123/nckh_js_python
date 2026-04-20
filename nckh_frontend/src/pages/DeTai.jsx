@@ -102,7 +102,10 @@ const DeTai = () => {
       setModalOpen(false);
       fetchData();
     } catch (error) {
-      toast.error("Lỗi khi kết nối hoặc dữ liệu không hợp lệ.");
+      const errorMsg = error.response?.data 
+        ? Object.entries(error.response.data).map(([k, v]) => `${k}: ${v}`).join(' ') 
+        : "Lỗi kết nối server hoặc dữ liệu không hợp lệ.";
+      toast.error(errorMsg);
     }
   };
 
