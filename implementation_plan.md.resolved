@@ -1,0 +1,63 @@
+# Soft Delete Implementation Plan
+
+Cấu trúc dự án của bạn hiện tại đang thực hiện xóa cứng (hard delete) - xóa vĩnh viễn khỏi database. Yêu cầu của bạn là chuyển qua xóa mềm (soft delete) cho tất cả các bảng để bảo toàn cấu trúc và dữ liệu. 
+
+## Mô tả giải pháp
+
+1. **Tạo abstract base model `SoftDeleteModel`**: 
+   - Chứa trường `is_deleted = models.BooleanField(default=False)`.
+   - Ghi đè phương thức `delete()` để chỉ đổi trạng thái thành `True` thay vì xóa khỏi database.
+   - Sử dụng `Custom Manager` để đảm bảo các câu lệnh `.all()`, `.filter()` mặc định chỉ lấy những dữ liệu chưa bị xóa (`is_deleted=False`).
+
+2. **Cập nhật lại các Model**: 
+   - Cho tất cả các class (`Khoa`, `BoMon`, `GiangVien`, `SinhVien`, `DeTai`, `ThamGiaDeTai`, `DonViTaiTro`, `TaiTro`, `HuongDanDeTai`) kế thừa từ `SoftDeleteModel`.
+
+3. **Xử lý dính líu đến `unique_together`**:
+   - > [!WARNING] 
+     > Khi một bảng có `unique_together` (Ví dụ: 1 sinh viên chỉ được tham gia 1 đề tài 1 lần), nếu ta xóa mềm (dữ liệu vẫn còn trong DB), việc thêm lại sinh viên đó vào đề tài sẽ bị lỗi ở mức Database do vi phạm tính độc nhất.
+   - Cần phải chỉnh sửa một chút trong `core/views.py` (hàm `add_sinhvien` và những chỗ có logic tương tự): Nếu sinh viên đã từng tham gia và bị xóa mềm, thì ta sẽ "phục hồi" (undelete) dòng đó lại và thiết lập lại vai trò, thay vì báo lỗi.
+
+## Các thay đổi chi tiết
+
+### Cấu trúc Model (File `core/models.py`)
+
+#### [NEW] Thêm cơ chế SoftDelete
+```python
+class SoftDeleteManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
+class SoftDeleteModel(models.Model):
+    is_deleted = models.BooleanField(default=False)
+    
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Meta:
+        abstract = True
+
+    def delete(self, *args, **kwargs):
+        self.is_deleted = True
+        self.save()
+```
+
+#### [MODIFY] Sửa đổi tất cả models
+Thắp lại tính kế thừa cho tất cả các models từ `models.Model` thành `SoftDeleteModel`.
+Ví dụ:
+```python
+class Khoa(SoftDeleteModel):
+   ...
+```
+
+### Logic Views (File `core/views.py`)
+
+#### [MODIFY] Hàm `add_sinhvien`
+Cần thay đổi logic kiểm tra sự tồn tại trong `add_sinhvien` để xử lý việc "undelete". Thay vì chỉ `create`, ta dùng `all_objects` để lấy cả sinh viên đã bị xóa mềm. Nếu sinh viên đã từng tham gia (bị xóa mềm), ta "sống lại" bản ghi đó.
+
+## Open Questions
+
+Xin ý kiến của bạn về một vấn đề:
+> [!IMPORTANT]
+> - Trong Admin Dashboard (Django Admin) hoặc nếu bạn thao tác truy vấn trực tiếp DB, bạn có muốn hiện các record đã bị xoá mềm không? Mặc định với cách làm này, các ModelViewSet của REST API sẽ TỰ ĐỘNG ẩn đi các record bị xóa mềm (GET không ra, không thể update). Như vậy có đúng ý bạn không?
+
+Hãy ấn **Approve** (Đồng ý) nếu bạn thấy hợp lý và mình sẽ tiến hành triển khai + chạy migration.
