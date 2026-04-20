@@ -102,10 +102,18 @@ const DeTai = () => {
       setModalOpen(false);
       fetchData();
     } catch (error) {
-      const errorMsg = error.response?.data 
-        ? Object.entries(error.response.data).map(([k, v]) => `${k}: ${v}`).join(' ') 
-        : "Lỗi kết nối server hoặc dữ liệu không hợp lệ.";
+      let errorMsg = "Lỗi kết nối server hoặc dữ liệu không hợp lệ.";
+      if (error.response?.data) {
+        if (typeof error.response.data === 'object') {
+          errorMsg = Object.entries(error.response.data)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join(' | ');
+        } else if (typeof error.response.data === 'string' && error.response.data.length < 200) {
+          errorMsg = error.response.data;
+        }
+      }
       toast.error(errorMsg);
+      console.error("Submission error:", error.response?.data);
     }
   };
 

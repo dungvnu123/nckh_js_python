@@ -88,7 +88,9 @@ class DeTai(SoftDeleteModel):
     gv_huong_dan = models.ForeignKey(
         GiangVien,
         on_delete=models.CASCADE,
-        related_name='detai'
+        related_name='detai',
+        null=True,
+        blank=True
     )
 
     def __str__(self):
